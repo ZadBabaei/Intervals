@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "IntervalApp",
-    "slug": "IntervalApp",
+    "name": "Intervals",
+    "slug": "Intervals",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/IntroIcon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -20,10 +20,19 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.zad8888.Intervals"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-sqlite"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e831286d-885e-4b6a-bb2d-bbb3f927c93c"
+      }
     }
   }
 }

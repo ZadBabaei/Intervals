@@ -1,6 +1,37 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, StatusBar, Alert } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
+
+const alarmSounds = [
+	{ label: "None", value: "none" },
+	{ label: "Alert Sound", value: "alert-sound-87478.mp3" },
+	{ label: "Chime Alert", value: "chime-alert-demo-309545.mp3" },
+	{ label: "Estonia EAS Alarm", value: "estonia-eas-alarm-1984-sad-249124.mp3" },
+	{ label: "Extraterrestrial Alert", value: "extraterrestrial-alert-sound-287337.mp3" },
+	{ label: "Japan EAS Alarm", value: "japan-eas-alarm-277877.mp3" },
+	{ label: "Lofi Alarm Clock", value: "lofi-alarm-clock-243766.mp3" },
+	{ label: "Notification 9", value: "notification-9-158194.mp3" },
+	{ label: "Notification Ping", value: "notification-ping-335500.mp3" },
+	{ label: "Percu", value: "percu-194207.mp3" },
+	{ label: "Thailand EAS Alarm", value: "thailand-eas-alarm-2006-266492.mp3" },
+	{ label: "Tonal Fountain", value: "tonal-fountain-sound-effect-241390.mp3" },
+]; 
+
+const soundMap = {
+	none: null,
+	"alert-sound-87478.mp3": require("../assets/Audio/alert-sound-87478.mp3"),
+	"chime-alert-demo-309545.mp3": require("../assets/Audio/chime-alert-demo-309545.mp3"),
+	"estonia-eas-alarm-1984-sad-249124.mp3": require("../assets/Audio/estonia-eas-alarm-1984-sad-249124.mp3"),
+	"extraterrestrial-alert-sound-287337.mp3": require("../assets/Audio/extraterrestrial-alert-sound-287337.mp3"),
+	"japan-eas-alarm-277877.mp3": require("../assets/Audio/japan-eas-alarm-277877.mp3"),
+	"lofi-alarm-clock-243766.mp3": require("../assets/Audio/lofi-alarm-clock-243766.mp3"),
+	"notification-9-158194.mp3": require("../assets/Audio/notification-9-158194.mp3"),
+	"notification-ping-335500.mp3": require("../assets/Audio/notification-ping-335500.mp3"),
+	"percu-194207.mp3": require("../assets/Audio/percu-194207.mp3"),
+	"thailand-eas-alarm-2006-266492.mp3": require("../assets/Audio/thailand-eas-alarm-2006-266492.mp3"),
+	"tonal-fountain-sound-effect-241390.mp3": require("../assets/Audio/tonal-fountain-sound-effect-241390.mp3"),
+}; //
 
 export default function TimerScreen({ navigation, route }) {
 	const { routine } = route.params || {};
@@ -10,11 +41,63 @@ export default function TimerScreen({ navigation, route }) {
 	const [timeLeft, setTimeLeft] = useState(0);
 	const [isRunning, setIsRunning] = useState(false);
 
+	const soundObjectRef = useRef(new Audio.Sound());
+
+	const playSound = async (soundKey) => {
+		const soundSource = soundMap[soundKey];
+		if (!soundSource) {
+			console.log("No sound selected or sound file not found for:", soundKey);
+			return;
+		}
+
+		try {
+			await soundObjectRef.current.unloadAsync();
+			await soundObjectRef.current.loadAsync(soundSource);
+			await soundObjectRef.current.playAsync();
+			console.log("Playing sound:", soundKey);
+		} catch (error) {
+			console.error("Error playing sound:", error);
+		}
+	};
+
 	useEffect(() => {
 		if (routine && routine.intervals && routine.intervals.length > 0) {
 			setTimeLeft(routine.intervals[0].duration);
 		}
+
+		return () => {
+			if (soundObjectRef.current) {
+				soundObjectRef.current.unloadAsync();
+			}
+		};
 	}, [routine]);
+
+	useEffect(() => {
+		let timerInterval;
+
+		if (isRunning && timeLeft > 0) {
+			timerInterval = setInterval(() => {
+				setTimeLeft((prevTime) => prevTime - 1);
+			}, 1000);
+		} else if (timeLeft === 0 && isRunning) {
+			playSound(routine?.sound); 
+
+			if (currentSegmentIndex < routine.intervals.length - 1) {
+				setCurrentSegmentIndex((prevIndex) => prevIndex + 1);
+				setTimeLeft(routine.intervals[currentSegmentIndex + 1].duration);
+			} else if (currentSet < routine.sets) {
+				setCurrentSet((prevSet) => prevSet + 1);
+				setCurrentSegmentIndex(0); 
+				setTimeLeft(routine.intervals[0].duration);
+			} else {
+				
+				setIsRunning(false);
+				Alert.alert("Routine Complete!", `${routine.name} finished all sets.`);
+			}
+		}
+
+		return () => clearInterval(timerInterval); 
+	}, [timeLeft, isRunning, currentSegmentIndex, currentSet, routine]);
 
 	const formatDuration = (seconds) => {
 		const minutes = Math.floor(seconds / 60);
@@ -23,6 +106,9 @@ export default function TimerScreen({ navigation, route }) {
 		const formattedSeconds = remainingSeconds < 10 ? `0${remainingSeconds}` : `${remainingSeconds}`;
 		return `${formattedMinutes}:${formattedSeconds}`;
 	};
+
+	const currentInterval = routine?.intervals[currentSegmentIndex];
+	const cueText = currentInterval?.type === "work" ? "Work!" : "Rest!";
 
 	return (
 		<SafeAreaView style={styles.container}>
@@ -45,7 +131,15 @@ export default function TimerScreen({ navigation, route }) {
 								Current Segment: {currentSegmentIndex + 1} of {routine.intervals.length}
 							</Text>
 							<Text style={styles.routineDetails}>
-								Phase: {formatDuration(routine.intervals[currentSegmentIndex]?.duration || 0)}
+								Phase: {currentInterval?.type === "work" ? "Work" : "Rest"} (
+								{formatDuration(currentInterval?.duration || 0)})
+							</Text>
+							
+							<Text style={styles.routineDetails}>
+								Alarm:{" "}
+								{routine.sound
+									? alarmSounds.find((s) => s.value === routine.sound)?.label || "Custom Sound"
+									: "None"}
 							</Text>
 						</View>
 					)}
@@ -56,19 +150,11 @@ export default function TimerScreen({ navigation, route }) {
 
 			<View style={styles.timerPlaceholder}>
 				<Text style={styles.timerText}>{formatDuration(timeLeft)}</Text>
-				<Text style={styles.cueText}>
-					{routine?.intervals[currentSegmentIndex]?.type === "work" ? "Work!" : "Rest!"}
-				</Text>
+				<Text style={styles.cueText}>{cueText}</Text>
 			</View>
 
 			<View style={styles.controlsPlaceholder}>
-				<TouchableOpacity
-					style={styles.controlButton}
-					onPress={() => {
-						setIsRunning(!isRunning);
-						Alert.alert("Action", isRunning ? "Pausing Timer" : "Starting Timer");
-					}}
-				>
+				<TouchableOpacity style={styles.controlButton} onPress={() => setIsRunning(!isRunning)}>
 					<Text style={styles.controlButtonText}>{isRunning ? "Pause" : "Start"}</Text>
 				</TouchableOpacity>
 				<TouchableOpacity
@@ -78,9 +164,8 @@ export default function TimerScreen({ navigation, route }) {
 							setCurrentSegmentIndex(0);
 							setCurrentSet(1);
 							setTimeLeft(routine.intervals[0].duration);
-							setIsRunning(false);
+							setIsRunning(false); 
 						}
-						Alert.alert("Action", "Timer Reset");
 					}}
 				>
 					<Text style={styles.controlButtonText}>Reset</Text>

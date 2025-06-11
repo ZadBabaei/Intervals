@@ -13,43 +13,64 @@ import {
 	ScrollView,
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Picker } from "@react-native-picker/picker"; // Import Picker
+import { Picker } from "@react-native-picker/picker";
+import { addRoutine, updateRoutine } from "../DB/db"; 
 
-// Define your alarm sound options
-// In a real app, these would correspond to actual audio files (e.g., local assets or remote URLs)
+
 const alarmSounds = [
 	{ label: "None", value: "none" },
-	{ label: "Bell Chime", value: "bell_chime" },
-	{ label: "Buzzer", value: "buzzer" },
-	{ label: "Ding", value: "ding" },
-	{ label: "Ascending Tone", value: "ascending_tone" },
-	{ label: "Classic Alarm", value: "classic_alarm" },
-	{ label: "Chirp", value: "chirp" },
-	{ label: "Whistle", value: "whistle" },
-	{ label: "Gong", value: "gong" },
-	{ label: "Digital Beep", value: "digital_beep" },
+	{ label: "Alert Sound", value: "alert-sound-87478.mp3" },
+	{ label: "Chime Alert", value: "chime-alert-demo-309545.mp3" },
+	{ label: "Estonia EAS Alarm", value: "estonia-eas-alarm-1984-sad-249124.mp3" },
+	{ label: "Extraterrestrial Alert", value: "extraterrestrial-alert-sound-287337.mp3" },
+	{ label: "Japan EAS Alarm", value: "japan-eas-alarm-277877.mp3" },
+	{ label: "Lofi Alarm Clock", value: "lofi-alarm-clock-243766.mp3" },
+	{ label: "Notification 9", value: "notification-9-158194.mp3" },
+	{ label: "Notification Ping", value: "notification-ping-335500.mp3" },
+	{ label: "Percu", value: "percu-194207.mp3" },
+	{ label: "Thailand EAS Alarm", value: "thailand-eas-alarm-2006-266492.mp3" },
+	{ label: "Tonal Fountain", value: "tonal-fountain-sound-effect-241390.mp3" },
 ];
 
 export default function AddEditIntervalScreen({ navigation, route }) {
 	const routineToEdit = route.params?.routine;
+	const onSaveCallback = route.params?.onSave; 
 
 	const [name, setName] = useState(routineToEdit?.name || "");
 	const [intervals, setIntervals] = useState(
-		routineToEdit?.intervals || [{ id: Date.now().toString(), duration: "", type: "work" }]
+		routineToEdit?.intervals || [
+			{ id: Date.now().toString() + "work", duration: "30", type: "work" }, 
+			{ id: Date.now().toString() + "rest", duration: "10", type: "rest" }, 
+		]
 	);
 	const [sets, setSets] = useState(routineToEdit?.sets?.toString() || "1");
 	const [description, setDescription] = useState(routineToEdit?.description || "");
-	// New state for selected sound
 	const [selectedSound, setSelectedSound] = useState(routineToEdit?.sound || "none");
 
 	const isEditing = !!routineToEdit;
 
+	useEffect(() => {
+		if (isEditing && routineToEdit.intervals) {
+			setIntervals(
+				routineToEdit.intervals.map((interval) => ({
+					...interval,
+					duration: interval.duration.toString(), 
+				}))
+			);
+			setSets(routineToEdit.sets.toString());
+			setSelectedSound(routineToEdit.sound || "none");
+		}
+	}, [isEditing, routineToEdit]);
+
 	const handleAddInterval = () => {
-		setIntervals((prevIntervals) => [...prevIntervals, { id: Date.now().toString(), duration: "", type: "work" }]);
+		setIntervals((prevIntervals) => [
+			...prevIntervals,
+			{ id: Date.now().toString(), duration: "30", type: "work" }, 
+		]);
 	};
 
 	const handleRemoveInterval = (id) => {
-		if (intervals.length === 1) {
+		if (intervals.length <= 1) {
 			Alert.alert("Cannot Remove", "A routine must have at least one interval.");
 			return;
 		}
@@ -62,7 +83,13 @@ export default function AddEditIntervalScreen({ navigation, route }) {
 		);
 	};
 
-	const handleSaveRoutine = () => {
+	const handleIntervalTypeChange = (id, newType) => {
+		setIntervals((prevIntervals) =>
+			prevIntervals.map((interval) => (interval.id === id ? { ...interval, type: newType } : interval))
+		);
+	};
+
+	const handleSaveRoutine = async () => {
 		if (!name.trim()) {
 			Alert.alert("Validation Error", "Routine name cannot be empty.");
 			return;
@@ -80,7 +107,7 @@ export default function AddEditIntervalScreen({ navigation, route }) {
 			if (isNaN(parsedDuration) || parsedDuration <= 0) {
 				Alert.alert(
 					"Validation Error",
-					`All interval durations must be positive numbers. Please check "${interval.duration}".`
+					`All interval durations must be positive numbers. Please check duration for interval type "${interval.type}".`
 				);
 				return;
 			}
@@ -92,16 +119,27 @@ export default function AddEditIntervalScreen({ navigation, route }) {
 			name: name.trim(),
 			intervals: validIntervals,
 			sets: parsedSets,
-			description: description.trim() || `Custom routine with ${validIntervals.length} segments.`,
-			sound: selectedSound, // Include the selected sound
+			description: description.trim(),
+			sound: selectedSound,
 		};
 
-		if (isEditing) {
-			Alert.alert("Routine Updated", `${newRoutine.name} has been updated!`);
-			navigation.navigate("Home", { updatedRoutine: newRoutine });
-		} else {
-			Alert.alert("Routine Saved", `${newRoutine.name} has been added!`);
-			navigation.navigate("Home", { newRoutine: newRoutine });
+		try {
+			if (isEditing) {
+				await updateRoutine(newRoutine);
+				Alert.alert("Routine Updated", `${newRoutine.name} has been updated!`);
+			} else {
+				await addRoutine(newRoutine);
+				Alert.alert("Routine Saved", `${newRoutine.name} has been added!`);
+			}
+			if (onSaveCallback) {
+				onSaveCallback();
+			} else {
+				navigation.navigate("Home", { shouldRefresh: true });
+			}
+			navigation.goBack();
+		} catch (error) {
+			console.error("Error saving routine:", error);
+			Alert.alert("Error", `Failed to save routine: ${error.message}`);
 		}
 	};
 
@@ -139,9 +177,20 @@ export default function AddEditIntervalScreen({ navigation, route }) {
 								placeholder="Duration (seconds)"
 								placeholderTextColor="#888"
 								keyboardType="numeric"
-								value={interval.duration.toString()}
+								value={interval.duration} 
 								onChangeText={(text) => handleIntervalDurationChange(interval.id, text)}
 							/>
+							<View style={styles.typePickerContainer}>
+								<Picker
+									selectedValue={interval.type}
+									onValueChange={(itemValue) => handleIntervalTypeChange(interval.id, itemValue)}
+									style={styles.typePicker}
+									itemStyle={styles.typePickerItem}
+								>
+									<Picker.Item label="Work" value="work" />
+									<Picker.Item label="Rest" value="rest" />
+								</Picker>
+							</View>
 							{intervals.length > 1 && (
 								<TouchableOpacity
 									style={styles.removeIntervalButton}
@@ -172,7 +221,7 @@ export default function AddEditIntervalScreen({ navigation, route }) {
 					<View style={styles.pickerContainer}>
 						<Picker
 							selectedValue={selectedSound}
-							onValueChange={(itemValue, itemIndex) => setSelectedSound(itemValue)}
+							onValueChange={(itemValue) => setSelectedSound(itemValue)}
 							style={styles.picker}
 							itemStyle={styles.pickerItem}
 						>
@@ -308,14 +357,29 @@ const styles = StyleSheet.create({
 		borderWidth: 1,
 		borderColor: "#00ff00",
 		marginBottom: 10,
-		overflow: "hidden", // Ensures the picker content stays within bounds
+		overflow: "hidden",
 	},
 	picker: {
-		height: 50, // Adjust height as needed
-		color: "#ffffff", // Text color for picker items
+		height: 50,
+		color: "#ffffff",
 	},
 	pickerItem: {
-		color: "#ffffff", // This might not work on all platforms for item text color.
-		// Styling picker items can be tricky and platform-dependent.
+		color: "#ffffff",
+	},
+	typePickerContainer: {
+		backgroundColor: "#333333",
+		borderRadius: 10,
+		borderWidth: 1,
+		borderColor: "#00ff00",
+		flex: 0.8,
+		marginRight: 10,
+		overflow: "hidden",
+	},
+	typePicker: {
+		height: 50,
+		color: "#ffffff",
+	},
+	typePickerItem: {
+		color: "#ffffff",
 	},
 });

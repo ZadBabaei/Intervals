@@ -1,28 +1,34 @@
-import React from "react";
+import React, { useEffect } from "react"; 
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-// Import your screens
-import MyHomePage from "./screens/MyHomePage"; // Make sure this path is correct
-import TimerScreen from "./screens/TimerScreen"; // Make sure this path is correct
+
+import MyHomePage from "./screens/MyHomePage";
+import TimerScreen from "./screens/TimerScreen";
 import AddEditIntervalScreen from "./screens/AddEditIntervalScreen";
+import { initDatabase } from "./DB/db"; 
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+
+	useEffect(() => {
+		initDatabase()
+			.then(() => console.log("Database initialized successfully."))
+			.catch((err) => console.error("Failed to initialize database:", err));
+	}, []); 
 	return (
 		<NavigationContainer>
 			<Stack.Navigator
-				initialRouteName="Home" // This name must match the name in Stack.Screen
+				initialRouteName="Home"
 				screenOptions={{
-					headerShown: false, // Hide the default header for all screens
-					animation: "slide_from_right", // Smooth slide animation
+					headerShown: false,
+					animation: "slide_from_right",
 				}}
 			>
-
 				<Stack.Screen name="Home" component={MyHomePage} />
 				<Stack.Screen name="Timer" component={TimerScreen} />
-				<Stack.Screen name="AddEditInterval" component={AddEditIntervalScreen} /> 
+				<Stack.Screen name="AddEditInterval" component={AddEditIntervalScreen} />
 			</Stack.Navigator>
 		</NavigationContainer>
 	);

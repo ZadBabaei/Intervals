@@ -1,92 +1,122 @@
-import React, { useState, useEffect } from "react";
-import { StyleSheet, Text, View, TouchableOpacity, FlatList, StatusBar, SafeAreaView } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+	StyleSheet,
+	Text,
+	View,
+	TouchableOpacity,
+	FlatList,
+	StatusBar,
+	SafeAreaView,
+	Alert,
+	ImageBackground,
+} from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-
-const initialIntervals = [
-	{
-		id: "1",
-		name: "Standard HIIT",
-		intervals: [
-			{ id: "1a", duration: 30, type: "work" },
-			{ id: "1b", duration: 10, type: "work" },
-		],
-		sets: 8,
-		description: "High intensity interval training with 30s work, 10s rest, repeated 8 times.",
-	},
-	{
-		id: "2",
-		name: "Pomodoro Focus",
-		intervals: [
-			{ id: "2a", duration: 25 * 60, type: "work" },
-			{ id: "2b", duration: 5 * 60, type: "work" },
-		],
-		sets: 4,
-		description: "25 min focus, 5 min break, 4 cycles.",
-	},
-	{
-		id: "3",
-		name: "Custom Stretch Sequence",
-		intervals: [
-			{ id: "3a", duration: 60, type: "work" },
-			{ id: "3b", duration: 45, type: "work" },
-			{ id: "3c", duration: 30, type: "work" },
-		],
-		sets: 1,
-		description: "60s, 45s, 30s stretches.",
-	},
-];
+import { getRoutines, deleteRoutine } from "../DB/db"; 
 
 export default function MyHomePage({ navigation, route }) {
-	const [intervals, setIntervals] = useState(initialIntervals);
-	const [quickStartRoutine, setQuickStartRoutine] = useState(initialIntervals[0]);
+	const [intervals, setIntervals] = useState([]); 
+	const [quickStartRoutine, setQuickStartRoutine] = useState(null); 
+
+	const loadRoutines = useCallback(async () => {
+		try {
+			const fetchedRoutines = await getRoutines();
+			setIntervals(fetchedRoutines);
+			if (fetchedRoutines.length > 0) {
+				
+				setQuickStartRoutine(fetchedRoutines[0]);
+			} else {
+				setQuickStartRoutine(null); 
+			}
+		} catch (error) {
+			console.error("Error loading routines:", error);
+			Alert.alert("Error", "Failed to load routines from database.");
+		}
+	}, []); 
 
 	useEffect(() => {
-		if (route.params?.newRoutine) {
-			setIntervals((prevIntervals) => {
-				const updated = [...prevIntervals, route.params.newRoutine];
-				return updated;
-			});
-			navigation.setParams({ newRoutine: undefined });
-		} else if (route.params?.updatedRoutine) {
-			setIntervals((prevIntervals) =>
-				prevIntervals.map((routine) =>
-					routine.id === route.params.updatedRoutine.id ? routine.isUpdated : routine
-				)
-			);
-			navigation.setParams({ updatedRoutine: undefined });
+		loadRoutines();
+	}, [loadRoutines]); 
+
+
+	useEffect(() => {
+		if (route.params?.shouldRefresh) {
+			loadRoutines();
+			navigation.setParams({ shouldRefresh: false });
 		}
-	}, [route.params?.newRoutine, route.params?.updatedRoutine, navigation]);
+	}, [route.params?.shouldRefresh, navigation, loadRoutines]);
 
 	const handleStartRoutine = (routine) => {
 		navigation.navigate("Timer", { routine: routine });
 	};
 
 	const handleAddInterval = () => {
-		navigation.navigate("AddEditInterval");
+		
+		navigation.navigate("AddEditInterval", { onSave: loadRoutines });
 	};
 
 	const handleEditInterval = (routine) => {
-		navigation.navigate("AddEditInterval", { routine: routine });
+		
+		navigation.navigate("AddEditInterval", { routine: routine, onSave: loadRoutines });
 	};
+
+
+	const handleRemoveRoutine = (id) => {
+		Alert.alert(
+			"Delete Routine",
+			"Are you sure you want to delete this routine?",
+			[
+				{
+					text: "Cancel",
+					style: "cancel",
+				},
+				{
+					text: "Delete",
+					onPress: async () => {
+						try {
+							await deleteRoutine(id);
+							loadRoutines(); 
+							Alert.alert("Deleted", "Routine removed successfully.");
+						} catch (error) {
+							console.error("Error deleting routine:", error);
+							Alert.alert("Error", "Failed to delete routine.");
+						}
+					},
+					style: "destructive",
+				},
+			],
+			{ cancelable: true }
+		);
+	};
+
 
 	const formatDuration = (seconds) => {
 		if (seconds < 60) return `${seconds}s`;
-		return `${Math.floor(seconds / 60)}m ${seconds % 60 > 0 ? `${seconds % 60}s` : ""}`.trim();
+		const minutes = Math.floor(seconds / 60);
+		const remainingSeconds = seconds % 60;
+		return `${minutes}m${remainingSeconds > 0 ? ` ${remainingSeconds}s` : ""}`.trim();
 	};
 
 	const renderIntervalItem = ({ item }) => (
 		<View style={styles.intervalCard}>
 			<View style={styles.cardHeader}>
 				<Text style={styles.cardTitle}>{item.name}</Text>
-				<TouchableOpacity onPress={() => handleEditInterval(item)}>
-					<MaterialIcons name="edit" size={20} color="#00ff00" />
-				</TouchableOpacity>
+				<View style={styles.cardActions}>
+					<TouchableOpacity onPress={() => handleEditInterval(item)} style={styles.actionButton}>
+						<MaterialIcons name="edit" size={24} color="#00ff00" />
+					</TouchableOpacity>
+					<TouchableOpacity onPress={() => handleRemoveRoutine(item.id)} style={styles.actionButton}>
+						<MaterialIcons name="delete" size={24} color="#ff0000" />
+					</TouchableOpacity>
+				</View>
 			</View>
 			<Text style={styles.cardDescription}>{item.description}</Text>
 			<View style={styles.detailsRow}>
 				{item.intervals && item.intervals.length > 0 && (
 					<Text style={styles.detailText}>
-						Segments: {item.intervals.map((segment) => formatDuration(segment.duration)).join(", ")}
+						Segments:{" "}
+						{item.intervals
+							.map((segment) => `${formatDuration(segment.duration)} (${segment.type})`)
+							.join(", ")}
 					</Text>
 				)}
 				<Text style={styles.detailText}>Sets: {item.sets}</Text>
@@ -98,44 +128,53 @@ export default function MyHomePage({ navigation, route }) {
 	);
 
 	return (
-		<SafeAreaView style={styles.container}>
-			<StatusBar barStyle="light-content" backgroundColor="#1a1a1a" />
-			<Text style={styles.header}>Interval App</Text>
+		<ImageBackground source={require("../assets/BAck.jpg")} style={styles.background}>
+			<SafeAreaView style={styles.container}>
+				<StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+				<Text style={styles.header}>Interval App</Text>
 
-			{quickStartRoutine && (
-				<View style={styles.quickStartCard}>
-					<Text style={styles.quickStartLabel}>Quick Start:</Text>
-					<Text style={styles.quickStartTitle}>{quickStartRoutine.name}</Text>
-					<TouchableOpacity
-						style={styles.quickStartButton}
-						onPress={() => handleStartRoutine(quickStartRoutine)}
-					>
-						<MaterialIcons name="play-arrow" size={28} color="#1a1a1a" />
-						<Text style={styles.quickStartButtonText}>Start Last</Text>
-					</TouchableOpacity>
-				</View>
-			)}
+				
+				{quickStartRoutine && (
+					<View style={styles.quickStartCard}>
+						<Text style={styles.quickStartLabel}>Quick Start:</Text>
+						<Text style={styles.quickStartTitle}>{quickStartRoutine.name}</Text>
+						<TouchableOpacity
+							style={styles.quickStartButton}
+							onPress={() => handleStartRoutine(quickStartRoutine)}
+						>
+							<MaterialIcons name="play-arrow" size={28} color="#1a1a1a" />
+							<Text style={styles.quickStartButtonText}>Start Last</Text>
+						</TouchableOpacity>
+					</View>
+				)}
 
-			<Text style={styles.sectionTitle}>Your Routines</Text>
-			<FlatList
-				data={intervals}
-				renderItem={renderIntervalItem}
-				keyExtractor={(item) => item.id}
-				contentContainerStyle={styles.intervalsList}
-				ListEmptyComponent={<Text style={styles.emptyListText}>No routines yet. Tap '+' to add one!</Text>}
-			/>
+				<Text style={styles.sectionTitle}>Your Routines</Text>
+				<FlatList
+					data={intervals}
+					renderItem={renderIntervalItem}
+					keyExtractor={(item) => item.id}
+					contentContainerStyle={styles.intervalsList}
+				
+					ListEmptyComponent={<Text style={styles.emptyListText}>No routines yet. Tap '+' to add one!</Text>}
+				/>
 
-			<TouchableOpacity style={styles.addButton} onPress={handleAddInterval}>
-				<MaterialIcons name="add" size={30} color="#1a1a1a" />
-			</TouchableOpacity>
-		</SafeAreaView>
+				<TouchableOpacity style={styles.addButton} onPress={handleAddInterval}>
+					<MaterialIcons name="add" size={30} color="#1a1a1a" />
+				</TouchableOpacity>
+			</SafeAreaView>
+		</ImageBackground>
 	);
 }
 
 const styles = StyleSheet.create({
+	background: {
+		flex: 1,
+		resizeMode: "cover",
+		justifyContent: "center",
+	},
 	container: {
 		flex: 1,
-		backgroundColor: "#1a1a1a",
+		backgroundColor: "rgba(0,0,0,0.5)", 
 		paddingHorizontal: 15,
 	},
 	header: {
@@ -143,17 +182,19 @@ const styles = StyleSheet.create({
 		fontWeight: "bold",
 		color: "#00ff00",
 		textAlign: "center",
-		marginTop: 20,
+		marginTop: 40, 
 		marginBottom: 25,
 	},
 	quickStartCard: {
-		backgroundColor: "#333333",
+		backgroundColor: "rgba(51, 51, 51, 0.7)",
 		borderRadius: 15,
 		padding: 20,
 		marginBottom: 20,
 		alignItems: "center",
 		flexDirection: "row",
 		justifyContent: "space-between",
+		borderWidth: 1,
+		borderColor: "#00ff00",
 	},
 	quickStartLabel: {
 		fontSize: 16,
@@ -190,10 +231,12 @@ const styles = StyleSheet.create({
 		paddingBottom: 80,
 	},
 	intervalCard: {
-		backgroundColor: "#333333",
+		backgroundColor: "rgba(51, 51, 51, 0.7)",
 		borderRadius: 15,
 		padding: 20,
 		marginBottom: 15,
+		borderWidth: 1,
+		borderColor: "#00ff00",
 	},
 	cardHeader: {
 		flexDirection: "row",
@@ -206,6 +249,15 @@ const styles = StyleSheet.create({
 		fontWeight: "bold",
 		color: "#ffffff",
 		flex: 1,
+		marginRight: 10,
+	},
+	cardActions: {
+		flexDirection: "row",
+		alignItems: "center",
+	},
+	actionButton: {
+		marginLeft: 10,
+		padding: 5,
 	},
 	cardDescription: {
 		fontSize: 14,
