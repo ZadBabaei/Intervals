@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import {
 	StyleSheet,
 	Text,
@@ -21,32 +23,45 @@ export default function MyHomePage({ navigation, route }) {
 		try {
 			const fetchedRoutines = await getRoutines();
 			setIntervals(fetchedRoutines);
-			if (fetchedRoutines.length > 0) {
-				
+
+			const lastId = await AsyncStorage.getItem("lastStartedRoutineId");
+			if (lastId) {
+				const lastRoutine = fetchedRoutines.find((r) => r.id === lastId);
+				if (lastRoutine) {
+					setQuickStartRoutine(lastRoutine);
+				} else if (fetchedRoutines.length > 0) {
+					setQuickStartRoutine(fetchedRoutines[0]);
+				} else {
+					setQuickStartRoutine(null);
+				}
+			} else if (fetchedRoutines.length > 0) {
 				setQuickStartRoutine(fetchedRoutines[0]);
 			} else {
-				setQuickStartRoutine(null); 
+				setQuickStartRoutine(null);
 			}
 		} catch (error) {
 			console.error("Error loading routines:", error);
 			Alert.alert("Error", "Failed to load routines from database.");
 		}
-	}, []); 
+	}, []);
+
 
 	useEffect(() => {
 		loadRoutines();
-	}, [loadRoutines]); 
+		const unsubscribe = navigation.addListener("focus", loadRoutines);
+		return unsubscribe;
+	}, [navigation, loadRoutines]);
 
 
-	useEffect(() => {
-		if (route.params?.shouldRefresh) {
-			loadRoutines();
-			navigation.setParams({ shouldRefresh: false });
+
+
+	const handleStartRoutine = async (routine) => {
+		try {
+			await AsyncStorage.setItem("lastStartedRoutineId", routine.id);
+		} catch (err) {
+			console.warn("Failed to save last started routine", err);
 		}
-	}, [route.params?.shouldRefresh, navigation, loadRoutines]);
-
-	const handleStartRoutine = (routine) => {
-		navigation.navigate("Timer", { routine: routine });
+		navigation.navigate("Timer", { routine });
 	};
 
 	const handleAddInterval = () => {
