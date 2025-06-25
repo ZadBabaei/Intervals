@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { StyleSheet, Text, View, SafeAreaView, TouchableOpacity, StatusBar, Alert } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Audio } from "expo-av";
+import { Audio } from "expo-av"; // ✅ Using expo-av
 import * as KeepAwake from "expo-keep-awake";
 import styles from "./TimerScreenStyle";
-
 
 export default function TimerScreen({ navigation, route }) {
 	const { routine } = route.params || {};
@@ -13,15 +12,18 @@ export default function TimerScreen({ navigation, route }) {
 	const [currentSet, setCurrentSet] = useState(1);
 	const [timer, setTimer] = useState(0);
 	const [timerRunning, setTimerRunning] = useState(false);
-	const [currentPhase, setCurrentPhase] = useState(""); 
+	const [currentPhase, setCurrentPhase] = useState("");
 	const prevPhaseRef = useRef(null);
 	const soundObjectRef = useRef(new Audio.Sound());
 	const intervalRef = useRef(null);
 
-
 	const playSound = async (soundName) => {
+		console.log("Trying to play sound:", soundName);
+
 		try {
 			if (!soundName || soundName === "none") return;
+
+			const fileName = soundName.trim().split("/").pop();
 
 			const soundMap = {
 				"alert-sound-87478.mp3": require("../assets/Audio/alert-sound-87478.mp3"),
@@ -36,12 +38,12 @@ export default function TimerScreen({ navigation, route }) {
 				"thailand-eas-alarm-2006-266492.mp3": require("../assets/Audio/thailand-eas-alarm-2006-266492.mp3"),
 				"tonal-fountain-sound-effect-241390.mp3": require("../assets/Audio/tonal-fountain-sound-effect-241390.mp3"),
 			};
-			const soundUri = soundMap[soundName];
+
+			const soundUri = soundMap[fileName];
 			if (!soundUri) {
-				console.warn("Unknown sound:", soundName);
+				console.warn("Unknown sound:", fileName);
 				return;
 			}
-
 
 			try {
 				await soundObjectRef.current.unloadAsync();
@@ -49,12 +51,11 @@ export default function TimerScreen({ navigation, route }) {
 
 			await soundObjectRef.current.loadAsync(soundUri);
 			await soundObjectRef.current.playAsync();
+
 			setTimeout(async () => {
 				try {
 					await soundObjectRef.current.stopAsync();
-				} catch (e) {
-
-				}
+				} catch (e) {}
 			}, 1000);
 		} catch (error) {
 			console.error("Error playing sound:", error);
@@ -65,26 +66,22 @@ export default function TimerScreen({ navigation, route }) {
 	const startNextPhase = (nextIndex, nextSet) => {
 		const intervals = routine.intervals;
 		if (nextIndex < intervals.length) {
-
 			const nextType = intervals[nextIndex].type;
 			setCurrentIntervalIndex(nextIndex);
 			setCurrentPhase(nextType === "work" ? "Work" : "Rest");
 			setTimer(intervals[nextIndex].duration);
 		} else if (currentSet < routine.sets) {
-
 			setCurrentSet(currentSet + 1);
 			setCurrentIntervalIndex(0);
-			setCurrentPhase(intervals[0].type === "work" ? "Work" : "Rest");
-			setTimer(intervals[0].duration);
+			setCurrentPhase(routine.intervals[0].type === "work" ? "Work" : "Rest");
+			setTimer(routine.intervals[0].duration);
 		} else {
-
 			setCurrentPhase("Finished");
 			setTimer(0);
 			setTimerRunning(false);
+			KeepAwake.deactivateKeepAwake();
 		}
 	};
-	
-
 
 	useEffect(() => {
 		if (timerRunning && timer > 0) {
@@ -95,10 +92,8 @@ export default function TimerScreen({ navigation, route }) {
 			clearInterval(intervalRef.current);
 			intervalRef.current = null;
 			if (currentPhase === "Work" || currentPhase === "Rest") {
-
 				startNextPhase(currentIntervalIndex + 1, currentSet);
 			} else if (currentPhase === "Break") {
-
 				startNextPhase(0, currentSet + 1);
 			} else if (currentPhase === "Finished") {
 				setTimerRunning(false);
@@ -120,7 +115,7 @@ export default function TimerScreen({ navigation, route }) {
 				playSound(routine.sound);
 			}
 			if (currentPhase === "Finished") {
-				playSound("chime-alert-demo-309545.mp3"); 
+				playSound("chime-alert-demo-309545.mp3");
 				KeepAwake.deactivateKeepAwake();
 			}
 			prevPhaseRef.current = currentPhase;
@@ -136,13 +131,12 @@ export default function TimerScreen({ navigation, route }) {
 		}
 	}, [routine]);
 
-	const toggleTimer =  async () => {
+	const toggleTimer = async () => {
 		if (timerRunning) {
 			setTimerRunning(false);
 			KeepAwake.deactivateKeepAwake();
 		} else {
 			if (currentPhase === "Finished" || !routine) {
-	
 				if (routine && routine.intervals && routine.intervals.length > 0) {
 					setCurrentIntervalIndex(0);
 					setCurrentSet(1);
@@ -151,11 +145,11 @@ export default function TimerScreen({ navigation, route }) {
 				}
 			}
 			setTimerRunning(true);
-			KeepAwake.deactivateKeepAwake();
+			KeepAwake.activateKeepAwake();
 		}
 	};
 
-	const resetTimer =  () => {
+	const resetTimer = () => {
 		clearInterval(intervalRef.current);
 		intervalRef.current = null;
 		setTimerRunning(false);
@@ -169,7 +163,6 @@ export default function TimerScreen({ navigation, route }) {
 			setTimer(0);
 		}
 		KeepAwake.deactivateKeepAwake();
-
 	};
 
 	const formatTime = (seconds) => {
@@ -179,15 +172,10 @@ export default function TimerScreen({ navigation, route }) {
 	};
 
 	const displayRoutineInfo = () => {
-		if (!routine) {
-			return <Text style={styles.noRoutineText}>No routine selected.</Text>;
-		}
-		if (currentPhase === "Finished") {
-			return <Text style={styles.routineName}>Routine Completed!</Text>;
-		}
-		if (currentPhase === "No Routine Loaded") {
+		if (!routine) return <Text style={styles.noRoutineText}>No routine selected.</Text>;
+		if (currentPhase === "Finished") return <Text style={styles.routineName}>Routine Completed!</Text>;
+		if (currentPhase === "No Routine Loaded")
 			return <Text style={styles.noRoutineText}>No intervals in this routine.</Text>;
-		}
 		if (currentPhase === "Break") {
 			return (
 				<>
@@ -197,14 +185,13 @@ export default function TimerScreen({ navigation, route }) {
 			);
 		}
 		const currentInterval = routine.intervals[currentIntervalIndex];
-		if (!currentInterval) {
-			return <Text style={styles.routineName}>Loading next interval...</Text>;
-		}
+		if (!currentInterval) return <Text style={styles.routineName}>Loading next interval...</Text>;
+
 		return (
 			<>
 				<Text style={styles.routineName}>{routine.name}</Text>
 				<Text style={styles.routineDetails}>
-					Phase: {currentPhase} ({currentInterval.type === "work" ? "Work" : "Rest"})
+					Phase: {currentPhase} ({currentInterval.type})
 				</Text>
 				<Text style={styles.routineDetails}>
 					Set: {currentSet} / {routine.sets}
@@ -246,6 +233,3 @@ export default function TimerScreen({ navigation, route }) {
 		</SafeAreaView>
 	);
 }
-
-
-	

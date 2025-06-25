@@ -120,8 +120,9 @@ export default function AddEditIntervalScreen({ navigation, route }) {
 			intervals: validIntervals,
 			sets: parsedSets,
 			description: description.trim(),
-			sound: selectedSound,
+			sound: selectedSound.trim(), // 🧼 sanitize
 		};
+		
 
 		try {
 			if (isEditing) {
